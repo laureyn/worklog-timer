@@ -1,0 +1,77 @@
+name: Build and release
+
+# Push a version tag such as v1.2.0 to publish a GitHub Release with the store zip.
+# Run it by hand (Actions > Build and release > Run workflow) to get a test build as an artifact.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to stage, e.g. 1.2.0. Leave empty to use manifest.json.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Unit tests
+        run: node tests/unit.mjs
+
+      - name: Syntax check
+        run: |
+          for f in background.js popup.js options.js src/*.js; do
+            node --check --input-type=module < "$f" || { echo "Syntax error in $f"; exit 1; }
+          done
+
+      - name: Work out version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            V="${GITHUB_REF_NAME#v}"
+            M=$(node -p "require('./manifest.json').version")
+            if [ "$M" != "$V" ]; then
+              echo "Tag is $V but manifest.json says $M. Update manifest.json, commit, and tag again."
+              exit 1
+            fi
+          else
+            V="$INPUT_VERSION"
+          fi
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+
+      - name: Stage extension
+        run: node scripts/build.mjs "$VERSION"
+
+      - name: Package store zip
+        run: |
+          V=$(node -p "require('./dist/worklog-timer/manifest.json').version")
+          ARCHIVE="worklog-timer-$V.zip"
+          # manifest.json must sit at the root of the zip, which is what the Chrome Web Store expects
+          (cd dist/worklog-timer && zip -qr "../$ARCHIVE" .)
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+          echo "Built dist/$ARCHIVE"
+          unzip -l "dist/$ARCHIVE" | head -20
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARCHIVE }}
+          path: dist/${{ env.ARCHIVE }}
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "dist/$ARCHIVE" \
+            --title "Worklog Timer $GITHUB_REF_NAME" --generate-notes

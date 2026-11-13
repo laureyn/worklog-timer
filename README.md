@@ -4,6 +4,14 @@ Worklog Timer is a Chrome and Brave extension (Manifest V3) that ports the Windo
 
 Track time on Jira issues, log work, and search the tasks assigned to you, from the toolbar or from a side panel that stays open.
 
+## Releasing a new version
+1. Change `version` in `manifest.json`, for example from 1.0.0 to 1.1.0. Chrome accepts one to four numbers separated by dots, and each store upload must be higher than the last one.
+2. Commit the change, then tag it: `git tag v1.1.0` and `git push origin v1.1.0`.
+3. The "Build and release" workflow runs the tests, packages `worklog-timer-1.1.0.zip` with `manifest.json` at the root, and publishes a GitHub Release with auto-generated notes.
+4. Upload that zip to the Chrome Web Store.
+
+To test a build without tagging, go to Actions, choose "Build and release", and click Run workflow. The zip appears as a download on that run. Leave the version field empty to use `manifest.json`, or type a version to override it for that build only.
+
 ## Install (unpacked)
 1. Unzip this folder somewhere permanent.
 2. Open `chrome://extensions` (or `brave://extensions`) and turn on Developer mode.
