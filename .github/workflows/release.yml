@@ -1,24 +1,31 @@
 name: Build and release
 
-# Push a version tag such as v1.2.0 to publish a GitHub Release with the store zip.
-# Run it by hand (Actions > Build and release > Run workflow) to get a test build as an artifact.
+# Two ways to release:
+#  - Push a tag such as v1.2.0: runs the build and publishes a GitHub Release for that tag.
+#  - Run it by hand with "publish" ticked: creates the tag v<version> and the release on main,
+#    without cloning or pushing anything from your computer.
+# Run it by hand without "publish" to get a test build as a downloadable artifact.
 on:
   push:
     tags: ['v[0-9]+.[0-9]+.[0-9]+*']
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to stage, e.g. 1.2.0. Leave empty to use manifest.json.'
+        description: 'Version, e.g. 1.2.0. Must match manifest.json on main when publishing.'
         required: false
         default: ''
+      publish:
+        description: 'Create the tag and GitHub Release from this run (run from main).'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
 
 jobs:
   build:
-    # Pinned so a runner-image migration doesn't change the build environment under us
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04   # pinned so a runner-image migration doesn't change the build environment
     steps:
       - uses: actions/checkout@v5
 
@@ -37,18 +44,34 @@ jobs:
 
       - name: Work out version
         env:
+          GH_TOKEN: ${{ github.token }}
           INPUT_VERSION: ${{ inputs.version }}
+          PUBLISH: ${{ inputs.publish }}
         run: |
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             V="${GITHUB_REF_NAME#v}"
-            M=$(node -p "require('./manifest.json').version")
-            if [ "$M" != "$V" ]; then
-              echo "Tag is $V but manifest.json says $M. Update manifest.json, commit, and tag again."
-              exit 1
-            fi
           else
             V="$INPUT_VERSION"
           fi
+          if [ -z "$V" ]; then echo "No version given."; exit 1; fi
+
+          if [ "$GITHUB_REF_TYPE" = "tag" ] || [ "$PUBLISH" = "true" ]; then
+            M=$(node -p "require('./manifest.json').version")
+            if [ "$M" != "$V" ]; then
+              echo "Version is $V but manifest.json says $M. Update manifest.json on main, commit, and try again."
+              exit 1
+            fi
+          fi
+
+          if [ "$PUBLISH" = "true" ]; then
+            if [ "$GITHUB_REF_NAME" != "main" ]; then
+              echo "Publishing only works from main. Re-run with Branch set to main."; exit 1
+            fi
+            if gh release view "v$V" > /dev/null 2>&1; then
+              echo "A release v$V already exists."; exit 1
+            fi
+          fi
+
           echo "VERSION=$V" >> "$GITHUB_ENV"
 
       - name: Stage extension
@@ -70,9 +93,12 @@ jobs:
           path: dist/${{ env.ARCHIVE }}
 
       - name: Publish GitHub Release
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || inputs.publish == true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "dist/$ARCHIVE" \
-            --title "Worklog Timer $GITHUB_REF_NAME" --generate-notes
+          TAG="v$VERSION"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then TAG="$GITHUB_REF_NAME"; fi
+          # --target creates the tag at this run's commit (main) when it doesn't exist yet
+          gh release create "$TAG" "dist/$ARCHIVE" \
+            --target "$GITHUB_SHA" --title "Worklog Timer $TAG" --generate-notes
