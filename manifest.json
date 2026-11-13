@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Worklog Timer",
+  "version": "1.0.0",
+  "description": "Track time on Jira issues, log work and search the tasks assigned to you — right from the toolbar.",
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "action": {
+    "default_title": "Worklog Timer",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png" }
+  },
+  "side_panel": { "default_path": "panel.html" },
+  "options_page": "options.html",
+  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": ["storage", "alarms", "idle", "sidePanel", "declarativeNetRequestWithHostAccess", "notifications"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+J" },
+      "description": "Open Worklog Timer"
+    },
+    "toggle-timer": {
+      "suggested_key": { "default": "Alt+Shift+K" },
+      "description": "Start / pause the most recent timer"
+    }
+  }
+}

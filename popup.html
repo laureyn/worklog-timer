@@ -1,0 +1,106 @@
+<!doctype html>
+<!-- Portions derived from Jira StopWatch, Copyright 2025 Carsten Gehling, Dan Tulloh, Y. Meyer-Norwood, et al.
+     Licensed under the Apache License, Version 2.0 (see LICENSE). Modified for the browser extension. -->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Worklog Timer</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><img src="icons/icon32.png" alt=""> <span>Worklog Timer</span></div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="timers" role="tab">Timers</button>
+      <button class="tab" data-tab="search" role="tab">My tasks</button>
+    </nav>
+    <div class="top-actions">
+      <button class="icon" id="btnPanel" title="Open in side panel (stays open)">◧</button>
+      <button class="icon" id="btnSettings" title="Settings">⚙</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main>
+    <section id="tab-timers" class="pane active">
+      <div id="awayNote" class="away-note" hidden></div>
+      <div id="currentTab" class="current-tab" hidden></div>
+      <ul id="timerList" class="timers"></ul>
+      <div class="empty" id="timersEmpty" hidden>
+        No timers yet. Add one below, or pick a task from <a href="#" data-goto="search">My tasks</a>.
+      </div>
+      <div class="add-row">
+        <button id="btnAdd" class="btn secondary">＋ Add timer</button>
+        <span class="total">Total <strong id="total">0:00:00</strong></span>
+      </div>
+    </section>
+
+    <section id="tab-search" class="pane">
+      <div class="search-bar">
+        <input id="q" type="search" placeholder="Search by text or key (e.g. ABC-123)…" autocomplete="off">
+        <select id="scope" title="Which issues to search">
+          <option value="mine">Assigned to me</option>
+          <option value="all">All issues</option>
+        </select>
+      </div>
+      <ul id="results" class="results"></ul>
+      <div class="empty" id="resultsMsg" hidden></div>
+    </section>
+  </main>
+
+  <!-- Worklog dialog (port of WorklogForm) -->
+  <dialog id="dlgLog">
+    <form method="dialog" id="logForm">
+      <h2>Log work <span id="logKey" class="key"></span></h2>
+      <p id="logSummary" class="muted small"></p>
+      <div class="grid2">
+        <label>Time spent<input id="logTime" required placeholder="1h 30m"></label>
+        <label>Started<input id="logStarted" type="datetime-local" required></label>
+      </div>
+      <label>Comment<textarea id="logComment" rows="3" placeholder="What did you work on?"></textarea></label>
+      <fieldset>
+        <legend>Remaining estimate <span id="logRemaining" class="muted"></span></legend>
+        <label class="radio"><input type="radio" name="est" value="auto" checked> Adjust automatically</label>
+        <label class="radio"><input type="radio" name="est" value="leave"> Leave unchanged</label>
+        <label class="radio"><input type="radio" name="est" value="new"> Set to <input id="estNew" class="inline" placeholder="2h"></label>
+        <label class="radio"><input type="radio" name="est" value="manual"> Reduce by <input id="estReduce" class="inline" placeholder="30m"></label>
+      </fieldset>
+      <p id="logError" class="error" hidden></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn ghost" id="logSaveComment" title="Keep the comment on the timer and post it later">Save comment</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" id="logCancel">Cancel</button>
+        <button type="submit" class="btn primary" id="logSubmit">Log work</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Edit time dialog (port of EditTimeForm) -->
+  <dialog id="dlgEdit">
+    <form method="dialog" id="editForm">
+      <h2>Edit time</h2>
+      <label>New time — or +15m / −15m to adjust
+        <input id="editTime" required autocomplete="off">
+      </label>
+      <div class="chips">
+        <button type="button" class="chip" data-adj="-15m">−15m</button>
+        <button type="button" class="chip" data-adj="-5m">−5m</button>
+        <button type="button" class="chip" data-adj="+5m">+5m</button>
+        <button type="button" class="chip" data-adj="+15m">+15m</button>
+        <button type="button" class="chip" data-adj="+1h">+1h</button>
+      </div>
+      <p id="editError" class="error" hidden></p>
+      <div class="dlg-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" id="editCancel">Cancel</button>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <datalist id="issueKeys"></datalist>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

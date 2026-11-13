@@ -1,0 +1,110 @@
+<!doctype html>
+<!-- Portions derived from Jira StopWatch, Copyright 2025 Carsten Gehling, Dan Tulloh, Y. Meyer-Norwood, et al.
+     Licensed under the Apache License, Version 2.0 (see LICENSE). Modified for the browser extension. -->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Worklog Timer settings</title>
+  <link rel="stylesheet" href="popup.css">
+  <style>
+    body { width: auto; max-height: none; min-height: 100vh; display: block; background: var(--bg2); }
+    .wrap { max-width: 640px; margin: 24px auto; padding: 0 16px 40px; }
+    h1 { font-size: 20px; display: flex; gap: 10px; align-items: center; }
+    h1 img { width: 28px; }
+    .card { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+    .card h2 { margin: 0 0 8px; font-size: 15px; }
+    label { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; font-weight: 500; }
+    label.check, label.radio { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
+    .hint { color: var(--muted); font-weight: 400; font-size: 12px; }
+    textarea { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+    .bar { display: flex; gap: 8px; align-items: center; position: sticky; bottom: 0; padding: 12px 0; background: var(--bg2); }
+    #status { flex: 1; }
+    #status.ok { color: var(--run); } #status.err { color: var(--danger); }
+    .auth-only { display: none; }
+    [data-auth="token"] .auth-token, [data-auth="pat"] .auth-pat, [data-auth="session"] .auth-session { display: flex; }
+    kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; background: var(--bg2); font-size: 12px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1><img src="icons/icon48.png" alt=""> Worklog Timer settings</h1>
+
+  <form id="f">
+    <div class="card" id="authCard">
+      <h2>Jira connection</h2>
+      <label>Jira URL
+        <input id="baseUrl" placeholder="https://your-company.atlassian.net" required>
+        <span class="hint">Your Jira site address. You'll be asked to allow the extension to access it.</span>
+      </label>
+      <label>Sign-in method
+        <select id="authMode">
+          <option value="token">Jira Cloud — email + API token (recommended)</option>
+          <option value="pat">Jira Server / Data Center — personal access token</option>
+          <option value="session">Use my existing browser login (no token)</option>
+        </select>
+      </label>
+      <label class="auth-only auth-token">Email
+        <input id="email" type="email" autocomplete="username">
+      </label>
+      <label class="auth-only auth-token auth-pat">API token / personal access token
+        <input id="apiToken" type="password" autocomplete="current-password">
+        <span class="hint auth-only auth-token">Create one at <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener">id.atlassian.com → Security → API tokens</a>.</span>
+      </label>
+      <p class="hint auth-only auth-session">Nothing is stored: the extension uses your normal Jira login in this browser. Stay logged in to Jira (you don't need a Jira tab open). If your session expires, the popup shows a "Log in to Jira" link.</p>
+    </div>
+
+    <div class="card">
+      <h2>Timers</h2>
+      <label class="check"><input type="checkbox" id="allowMultipleTimers"> Allow several timers to run at once</label>
+      <label class="check"><input type="checkbox" id="includeProjectName"> Show project name in issue summaries</label>
+      <label class="check"><input type="checkbox" id="showBadge"> Show running time on the toolbar icon</label>
+      <label class="check"><input type="checkbox" id="pauseOnClose"> Pause timers when the browser is closed or the computer sleeps / shuts down</label>
+      <label>When the screen is locked
+        <select id="lockBehavior">
+          <option value="none">Keep timers running</option>
+          <option value="pause">Pause running timers</option>
+          <option value="pauseResume">Pause, and resume on unlock</option>
+        </select>
+      </label>
+      <label>Start transitions
+        <textarea id="startTransitions" rows="3"></textarea>
+        <span class="hint">When a timer starts, the issue is moved through the first available transition whose name contains one of these lines (e.g. "In Progress"). Leave empty to disable.</span>
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>Logging work</h2>
+      <label>Where the worklog comment goes
+        <select id="postMode">
+          <option value="worklog">Worklog only</option>
+          <option value="comment">Issue comment only</option>
+          <option value="both">Both worklog and issue comment</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>My tasks</h2>
+      <label>JQL for "Assigned to me"
+        <textarea id="myJql" rows="2"></textarea>
+        <span class="hint">Default: <code>assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC</code></span>
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>Shortcuts</h2>
+      <p class="hint" style="margin:0"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd> opens the popup, <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> starts/pauses your most recent timer.
+        Change them at <code>chrome://extensions/shortcuts</code> (or <code>brave://extensions/shortcuts</code>).</p>
+    </div>
+
+    <div class="bar">
+      <span id="status"></span>
+      <button type="button" class="btn" id="btnTest">Test connection</button>
+      <button type="submit" class="btn primary">Save</button>
+    </div>
+  </form>
+</div>
+<script type="module" src="options.js"></script>
+</body>
+</html>
