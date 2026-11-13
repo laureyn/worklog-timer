@@ -17,11 +17,12 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Pinned so a runner-image migration doesn't change the build environment under us
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
 
@@ -63,7 +64,7 @@ jobs:
           echo "Built dist/$ARCHIVE"
           unzip -l "dist/$ARCHIVE" | head -20
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ env.ARCHIVE }}
           path: dist/${{ env.ARCHIVE }}
