@@ -9,6 +9,7 @@ export async function client() {
   const [settings, config] = await Promise.all([store.getSettings(), store.getJiraConfig()]);
   const jira = new Jira(settings, config);
   jira.onXsrf = syncRequestRules;
+  jira.viaTab = runInJiraTab;
   return jira;
 }
 
@@ -99,6 +100,45 @@ export async function syncRequestRules() {
   return { ok: !error, reason: error || 'ok' };
 }
 
+function waitForLoad(tabId) {
+  return new Promise((resolve) => {
+    const done = () => { chrome.tabs.onUpdated.removeListener(listener); resolve(); };
+    const listener = (id, info) => { if (id === tabId && info.status === 'complete') done(); };
+    chrome.tabs.onUpdated.addListener(listener);
+    setTimeout(done, 15000);
+  });
+}
+
+/**
+ * Runs a Jira request from inside a page on the Jira site, so Jira sees its own origin.
+ * Uses an open Jira tab if there is one, otherwise opens one in the background and closes it afterwards.
+ */
+export async function runInJiraTab(url, init) {
+  const origin = new URL(url).origin;
+  let [tab] = await chrome.tabs.query({ url: origin + '/*' });
+  let created = false;
+  if (!tab) {
+    tab = await chrome.tabs.create({ url: origin + '/', active: false });
+    created = true;
+    await waitForLoad(tab.id);
+  }
+  try {
+    const [out] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      world: 'MAIN',
+      args: [url, init],
+      func: async (u, i) => {
+        const r = await fetch(u, { ...i, credentials: 'include' });
+        return { status: r.status, text: await r.text() };
+      },
+    });
+    if (!out?.result) throw new Error('No response from the Jira tab.');
+    return out.result;
+  } finally {
+    if (created) chrome.tabs.remove(tab.id).catch(() => {});
+  }
+}
+
 /**
  * Sends a write request that Jira can't act on: no body, and a made-up issue key. Jira checks the
  * XSRF header before it looks at the issue, so a 403 XSRF means the Origin header still arrives,
@@ -106,10 +146,10 @@ export async function syncRequestRules() {
  */
 export async function writeCheck(jira) {
   try {
-    await jira.send('/rest/api/2/issue/NOPE-0/worklog', { method: 'POST', body: {} });
+    await jira.req('/rest/api/2/issue/NOPE-0/worklog', { method: 'POST', body: {} });
     return 'accepted';
   } catch (e) {
-    if (e.xsrf) return `rejected by XSRF check (HTTP ${e.status}): ${e.body || 'no body'}`;
+    if (e.xsrf) return `rejected by XSRF check (HTTP ${e.status}), even after the fallback: ${e.body || 'no body'}`;
     return `reached Jira (HTTP ${e.status}): ${e.message}`;
   }
 }

@@ -38,18 +38,26 @@ export class Jira {
     return true;
   }
 
-  /** Sends a request. If Jira refuses it for an XSRF check, restore the Origin rule and retry once. */
+  /**
+   * Sends a request. If Jira refuses it for an XSRF check, first restore the Origin rule and retry,
+   * then, if a `viaTab` runner is set, send the request from a Jira page (which Jira accepts).
+   */
   async req(path, opts = {}) {
     try {
       return await this.send(path, opts);
     } catch (e) {
-      if (!e.xsrf || opts.retried || !this.onXsrf) throw e;
-      await this.onXsrf();
-      return this.send(path, { ...opts, retried: true });
+      if (!e.xsrf) throw e;
+      if (!opts.retried && this.onXsrf) {
+        await this.onXsrf();
+        try { return await this.send(path, { ...opts, retried: true }); }
+        catch (e2) { if (!e2.xsrf) throw e2; }
+      }
+      if (this.viaTab && !opts.via) return this.send(path, { ...opts, retried: true, via: this.viaTab });
+      throw e;
     }
   }
 
-  async send(path, { method = 'GET', query, body, retried } = {}) {
+  async send(path, { method = 'GET', query, body, via } = {}) {
     if (!this.base) throw new JiraError('Jira URL is not set — open Settings.', 0);
     const url = new URL(this.base + path);
     for (const [k, v] of Object.entries(query || {})) if (v != null && v !== '') url.searchParams.set(k, v);
@@ -58,30 +66,36 @@ export class Jira {
     if (this.s.authMode === 'token') headers.Authorization = 'Basic ' + btoa(unescape(encodeURIComponent(`${this.s.email}:${this.s.apiToken}`)));
     else if (this.s.authMode === 'pat') headers.Authorization = 'Bearer ' + this.s.apiToken;
 
-    let res;
-    try {
-      res = await fetch(url, {
-        method, headers,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-        credentials: this.s.authMode === 'session' ? 'include' : 'omit',
-      });
-    } catch (e) {
-      throw new JiraError(`Can't reach ${url.host}. Check the URL and that the extension has permission for this site (Settings → Save).`, 0);
+    const init = {
+      method, headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      credentials: this.s.authMode === 'session' ? 'include' : 'omit',
+    };
+    let status, text;
+    if (via) {
+      ({ status, text } = await via(url.toString(), init));
+    } else {
+      let res;
+      try { res = await fetch(url, init); }
+      catch (e) {
+        throw new JiraError(`Can't reach ${url.host}. Check the URL and that the extension has permission for this site (Settings → Save).`, 0);
+      }
+      status = res.status;
+      text = await res.text();
     }
-    const text = await res.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { /* HTML error page */ }
-    if (!res.ok) {
+    if (status < 200 || status >= 300) {
       let msg = '';
       if (data) msg = [...(data.errorMessages || []), ...Object.values(data.errors || {})].join(' ') || data.message || '';
       if (!msg) msg = {
         401: this.s.authMode === 'session' ? 'Not logged in to Jira in this browser — open Jira, log in, then try again.' : 'Authentication failed — check email / token.',
         403: 'Permission denied (403).',
         404: 'Not found (404).',
-      }[res.status] || `Jira returned HTTP ${res.status}.`;
+      }[status] || `Jira returned HTTP ${status}.`;
       const xsrf = /xsrf/i.test(text);
       if (xsrf) msg = 'Jira rejected the request (XSRF check).';
-      const err = new JiraError(msg, res.status);
+      const err = new JiraError(msg, status);
       err.xsrf = xsrf;
       err.body = text.slice(0, 300);
       throw err;
