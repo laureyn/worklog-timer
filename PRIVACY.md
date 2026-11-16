@@ -26,7 +26,7 @@ The extension requests the permissions below. Each is used only for the purpose 
 - Alarms, to refresh the toolbar badge and record the heartbeat.
 - Side panel, to show the panel with the issue open in your current tab.
 - Notifications, to confirm a timer started or stopped from a keyboard shortcut.
-- Modifying request headers for your Jira site. This removes the browser's Origin header from the extension's own requests to that site, because Jira otherwise rejects them as cross-site. It does not affect other websites.
+- Modifying request headers for your Jira site. This sets the Origin header of the extension's own requests to that site, because Jira rejects writes that it considers cross-site. It does not affect other websites.
 
 ## Contact
 For questions about this policy or your data, email laureyn.dev@gmail.com or open an issue at https://github.com/laureyn/worklog-timer/issues

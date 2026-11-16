@@ -79,7 +79,8 @@ export async function syncRequestRules() {
   const base = normalizeBaseUrl(baseUrl);
   if (!base) { await chrome.storage.local.remove('ruleError'); return { ok: false, reason: 'no-url' }; }
   const host = new URL(base).hostname;
-  const action = { type: 'modifyHeaders', requestHeaders: [{ header: 'origin', operation: 'remove' }] };
+  // Jira accepts writes that come from its own site, so Origin is set to the site rather than removed
+  const action = { type: 'modifyHeaders', requestHeaders: [{ header: 'origin', operation: 'set', value: new URL(base).origin }] };
   const rules = [
     // 1: requests made by this extension's own pages and worker (initiator = extension origin)
     { id: 1, priority: 1, action, condition: { requestDomains: [host], initiatorDomains: [chrome.runtime.id], resourceTypes: ['xmlhttprequest', 'other'] } },

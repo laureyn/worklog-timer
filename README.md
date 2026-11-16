@@ -56,7 +56,7 @@ If the browser is closed or the computer sleeps, the extension records a heartbe
 ### Updated for current Jira
 - Search uses `/rest/api/2/search/jql`, because Jira Cloud removed `/search`. Server and Data Center fall back to `/search`.
 - The connection is checked with `/myself`, since `/rest/auth/1/session` doesn't exist on Cloud.
-- A `declarativeNetRequest` session rule removes the `Origin` header from this extension's own requests to your Jira host. Without it, Jira rejects POSTs with "XSRF check failed".
+- A `declarativeNetRequest` session rule sets the `Origin` header of this extension's own requests to your Jira site. Without it, Jira rejects POSTs with "XSRF check failed".
 - In a duration, `d` means one Jira working day (8h by default), not 24 hours.
 
 Not ported: the auto-update check and file logging. The browser handles updates, and you can use DevTools for debugging.
