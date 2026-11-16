@@ -39,6 +39,11 @@ function banner(msg, isErr = false, link) {
 const loginLink = () => h('a', { href: '#', onclick: (e) => { e.preventDefault(); chrome.tabs.create({ url: jira.base }); } }, 'Log in to Jira');
 /** Show the right fix for an auth error: log in (browser-login mode) or check settings (token modes). */
 function authBanner(e) {
+  if (e.needsTab) {
+    const open = h('a', { href: '#', onclick: (ev) => { ev.preventDefault(); chrome.tabs.create({ url: e.jiraUrl }); } }, 'Open Jira');
+    banner('Writes to Jira need your Jira site open in a tab.', true, open);
+    return true;
+  }
   if (e.xsrf) {
     banner('Jira rejected the request (XSRF check). Diagnostics are loading…', true, settingsLink());
     actions.diagnose(true).then((lines) => banner(['Jira rejected the request (XSRF check).', ...lines].join('\n'), true, settingsLink()));

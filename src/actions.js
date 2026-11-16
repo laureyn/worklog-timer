@@ -1,7 +1,7 @@
 // Portions derived from Jira StopWatch, Copyright 2025 Carsten Gehling, Dan Tulloh, Y. Meyer-Norwood, et al.
 // Licensed under the Apache License, Version 2.0 (see LICENSE). Modified: ported to a browser extension (JavaScript).
 // Higher-level operations shared by popup, side panel and service worker.
-import { Jira, normalizeBaseUrl } from './jira.js';
+import { Jira, JiraError, normalizeBaseUrl } from './jira.js';
 import * as store from './store.js';
 import { ceilMinute } from './time.js';
 
@@ -100,43 +100,30 @@ export async function syncRequestRules() {
   return { ok: !error, reason: error || 'ok' };
 }
 
-function waitForLoad(tabId) {
-  return new Promise((resolve) => {
-    const done = () => { chrome.tabs.onUpdated.removeListener(listener); resolve(); };
-    const listener = (id, info) => { if (id === tabId && info.status === 'complete') done(); };
-    chrome.tabs.onUpdated.addListener(listener);
-    setTimeout(done, 15000);
-  });
-}
-
 /**
  * Runs a Jira request from inside a page on the Jira site, so Jira sees its own origin.
- * Uses an open Jira tab if there is one, otherwise opens one in the background and closes it afterwards.
+ * Only uses a Jira tab the user already has open; never opens one by itself.
  */
 export async function runInJiraTab(url, init) {
   const origin = new URL(url).origin;
-  let [tab] = await chrome.tabs.query({ url: origin + '/*' });
-  let created = false;
+  const [tab] = await chrome.tabs.query({ url: origin + '/*' });
   if (!tab) {
-    tab = await chrome.tabs.create({ url: origin + '/', active: false });
-    created = true;
-    await waitForLoad(tab.id);
+    const err = new JiraError(`Open ${new URL(origin).host} in a tab, then try again.`, 0);
+    err.needsTab = true;
+    err.jiraUrl = origin + '/';
+    throw err;
   }
-  try {
-    const [out] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      world: 'MAIN',
-      args: [url, init],
-      func: async (u, i) => {
-        const r = await fetch(u, { ...i, credentials: 'include' });
-        return { status: r.status, text: await r.text() };
-      },
-    });
-    if (!out?.result) throw new Error('No response from the Jira tab.');
-    return out.result;
-  } finally {
-    if (created) chrome.tabs.remove(tab.id).catch(() => {});
-  }
+  const [out] = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    world: 'MAIN',
+    args: [url, init],
+    func: async (u, i) => {
+      const r = await fetch(u, { ...i, credentials: 'include' });
+      return { status: r.status, text: await r.text() };
+    },
+  });
+  if (!out?.result) throw new JiraError('No response from the Jira tab.', 0);
+  return out.result;
 }
 
 /**
@@ -149,6 +136,7 @@ export async function writeCheck(jira) {
     await jira.req('/rest/api/2/issue/NOPE-0/worklog', { method: 'POST', body: {} });
     return 'accepted';
   } catch (e) {
+    if (e.needsTab) return 'not tested: no Jira tab is open (open your Jira site to test the fallback)';
     if (e.xsrf) return `rejected by XSRF check (HTTP ${e.status}), even after the fallback: ${e.body || 'no body'}`;
     return `reached Jira (HTTP ${e.status}): ${e.message}`;
   }
