@@ -29,6 +29,7 @@ This is an unofficial extension, not affiliated with or endorsed by Atlassian. I
 - sidePanel: optional panel that shows the issue open in the current tab.
 - notifications: confirms timer changes made with keyboard shortcuts.
 - declarativeNetRequestWithHostAccess: sets the Origin header only on the extension's own requests to the user's Jira site, to the site itself. Jira requires this for API writes from an extension. Scoped to that one site, so no other sites are affected.
+- scripting: runs a Jira request inside a Jira tab that the user already has open, so Jira sees the request as coming from its own site. It is used only as a fallback when Jira rejects a request from the extension, and only on the Jira site the user configured. It never opens a tab by itself and does not run on any other website.
 - optional host permissions: requested per Jira site the user enters, at setup time. Also lets the extension read the address of the current tab on that site, to find the issue key. Nothing is sent elsewhere.
 
 **Privacy policy URL:** https://github.com/laureyn/worklog-timer/blob/main/PRIVACY.md
