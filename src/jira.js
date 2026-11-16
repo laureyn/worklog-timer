@@ -80,9 +80,10 @@ export class Jira {
         404: 'Not found (404).',
       }[res.status] || `Jira returned HTTP ${res.status}.`;
       const xsrf = /xsrf/i.test(text);
-      if (xsrf) msg = 'Jira rejected the request (XSRF check). The extension could not restore its request rule. Open Settings and click Save.';
+      if (xsrf) msg = 'Jira rejected the request (XSRF check).';
       const err = new JiraError(msg, res.status);
       err.xsrf = xsrf;
+      err.body = text.slice(0, 300);
       throw err;
     }
     return data;

@@ -78,14 +78,16 @@ export async function syncRequestRules() {
   const base = normalizeBaseUrl(baseUrl);
   if (!base) { await chrome.storage.local.remove('ruleError'); return { ok: false, reason: 'no-url' }; }
   const host = new URL(base).hostname;
-  const rule = {
-    id: 1, priority: 1,
-    action: { type: 'modifyHeaders', requestHeaders: [{ header: 'origin', operation: 'remove' }] },
-    condition: { requestDomains: [host], initiatorDomains: [chrome.runtime.id], resourceTypes: ['xmlhttprequest', 'other'] },
-  };
+  const action = { type: 'modifyHeaders', requestHeaders: [{ header: 'origin', operation: 'remove' }] };
+  const rules = [
+    // 1: requests made by this extension's own pages and worker (initiator = extension origin)
+    { id: 1, priority: 1, action, condition: { requestDomains: [host], initiatorDomains: [chrome.runtime.id], resourceTypes: ['xmlhttprequest', 'other'] } },
+    // 2: fallback for requests not attached to any tab, matched without the initiator condition
+    { id: 2, priority: 1, action, condition: { requestDomains: [host], tabIds: [-1], resourceTypes: ['xmlhttprequest', 'other'] } },
+  ];
   let error = '';
   try {
-    await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [1], addRules: [rule] });
+    await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [1, 2], addRules: rules });
     const active = await chrome.declarativeNetRequest.getSessionRules();
     if (!active.some((r) => r.id === 1)) error = 'The browser did not keep the Origin rule.';
   } catch (e) {
@@ -96,6 +98,39 @@ export async function syncRequestRules() {
   else await chrome.storage.local.remove('ruleError');
   return { ok: !error, reason: error || 'ok' };
 }
+
+/**
+ * Sends a write request that Jira can't act on: no body, and a made-up issue key. Jira checks the
+ * XSRF header before it looks at the issue, so a 403 XSRF means the Origin header still arrives,
+ * and any other answer means the write itself is accepted.
+ */
+export async function writeCheck(jira) {
+  try {
+    await jira.send('/rest/api/2/issue/NOPE-0/worklog', { method: 'POST', body: {} });
+    return 'accepted';
+  } catch (e) {
+    if (e.xsrf) return `rejected by XSRF check (HTTP ${e.status}): ${e.body || 'no body'}`;
+    return `reached Jira (HTTP ${e.status}): ${e.message}`;
+  }
+}
+
+/** Human-readable state of everything that decides whether Jira accepts requests from the extension. */
+export async function diagnose(withWriteCheck = true) {
+  const lines = [];
+  const { baseUrl } = await store.getSettings();
+  const base = normalizeBaseUrl(baseUrl);
+  if (!base) return ['Jira URL is not set.'];
+  const host = new URL(base).hostname;
+  lines.push(`Jira site: ${host}`);
+  lines.push(`Site permission granted: ${await chrome.permissions.contains({ origins: [new URL(base).origin + '/*'] })}`);
+  const rules = await chrome.declarativeNetRequest.getSessionRules();
+  lines.push(`Origin rules active: ${rules.map((r) => r.id).join(', ') || 'none'}`);
+  const { ruleError } = await chrome.storage.local.get('ruleError');
+  if (ruleError) lines.push(`Last rule error: ${ruleError}`);
+  if (withWriteCheck) lines.push(`Write check: ${await writeCheck(await client())}`);
+  return lines;
+}
+
 
 /** Why Jira might still reject requests: missing site permission, or the Origin rule isn't active. */
 export async function requestDiagnosis() {

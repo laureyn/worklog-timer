@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0 (see LICENSE). Modified: ported to a browser extension (JavaScript).
 import * as store from './src/store.js';
 import { Jira, normalizeBaseUrl } from './src/jira.js';
+import { diagnose } from './src/actions.js';
 
 const $ = (s) => document.querySelector(s);
 const fields = ['baseUrl', 'authMode', 'email', 'apiToken', 'allowMultipleTimers', 'includeProjectName', 'showBadge', 'pauseOnClose',
@@ -74,6 +75,11 @@ $('#btnTest').addEventListener('click', () => {
     await chrome.runtime.sendMessage({ type: 'syncRules' }).catch(() => {});
     await test(s);
   });
+});
+
+$('#btnDiag').addEventListener('click', async () => {
+  $('#diag').textContent = 'Running…';
+  $('#diag').textContent = (await diagnose(true)).join('\n');
 });
 
 init();

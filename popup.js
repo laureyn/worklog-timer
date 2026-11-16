@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0 (see LICENSE). Modified: ported to a browser extension (JavaScript).
 import * as store from './src/store.js';
 import * as actions from './src/actions.js';
-import { requestDiagnosis } from './src/actions.js';
 import { Jira, jqlString, splitOrderBy } from './src/jira.js';
 import { clock, toJiraTime, parseJiraTime, parseTimeEdit, ceilMinute, toLocalInput, parseKey } from './src/time.js';
 
@@ -41,7 +40,8 @@ const loginLink = () => h('a', { href: '#', onclick: (e) => { e.preventDefault()
 /** Show the right fix for an auth error: log in (browser-login mode) or check settings (token modes). */
 function authBanner(e) {
   if (e.xsrf) {
-    requestDiagnosis().then((d) => banner(d || e.message, true, settingsLink()));
+    banner('Jira rejected the request (XSRF check). Diagnostics are loading…', true, settingsLink());
+    actions.diagnose(true).then((lines) => banner(['Jira rejected the request (XSRF check).', ...lines].join('\n'), true, settingsLink()));
     return true;
   }
   if (e.status !== 401 && e.status !== 403) return false;
