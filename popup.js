@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0 (see LICENSE). Modified: ported to a browser extension (JavaScript).
 import * as store from './src/store.js';
 import * as actions from './src/actions.js';
+import { requestDiagnosis } from './src/actions.js';
 import { Jira, jqlString, splitOrderBy } from './src/jira.js';
 import { clock, toJiraTime, parseJiraTime, parseTimeEdit, ceilMinute, toLocalInput, parseKey } from './src/time.js';
 
@@ -39,6 +40,10 @@ function banner(msg, isErr = false, link) {
 const loginLink = () => h('a', { href: '#', onclick: (e) => { e.preventDefault(); chrome.tabs.create({ url: jira.base }); } }, 'Log in to Jira');
 /** Show the right fix for an auth error: log in (browser-login mode) or check settings (token modes). */
 function authBanner(e) {
+  if (e.xsrf) {
+    requestDiagnosis().then((d) => banner(d || e.message, true, settingsLink()));
+    return true;
+  }
   if (e.status !== 401 && e.status !== 403) return false;
   if (settings.authMode === 'session' && e.status === 401) banner('Your Jira login has expired.', true, loginLink());
   else banner(e.message, true, settingsLink());
@@ -55,6 +60,7 @@ async function load() {
 async function init() {
   // The popup may open before the worker's alarm fires after a wake-up: check the gap first.
   await actions.heartbeat();
+  await actions.syncRequestRules();
   await load();
   if (isPanel) $('#btnPanel').hidden = true;
   windowId = (await chrome.windows.getCurrent()).id;

@@ -38,7 +38,18 @@ export class Jira {
     return true;
   }
 
-  async req(path, { method = 'GET', query, body } = {}) {
+  /** Sends a request. If Jira refuses it for an XSRF check, restore the Origin rule and retry once. */
+  async req(path, opts = {}) {
+    try {
+      return await this.send(path, opts);
+    } catch (e) {
+      if (!e.xsrf || opts.retried || !this.onXsrf) throw e;
+      await this.onXsrf();
+      return this.send(path, { ...opts, retried: true });
+    }
+  }
+
+  async send(path, { method = 'GET', query, body, retried } = {}) {
     if (!this.base) throw new JiraError('Jira URL is not set — open Settings.', 0);
     const url = new URL(this.base + path);
     for (const [k, v] of Object.entries(query || {})) if (v != null && v !== '') url.searchParams.set(k, v);
@@ -68,8 +79,11 @@ export class Jira {
         403: 'Permission denied (403).',
         404: 'Not found (404).',
       }[res.status] || `Jira returned HTTP ${res.status}.`;
-      if (/xsrf/i.test(text)) msg = 'Jira rejected the request (XSRF check). Re-save Settings so the extension can set up its request rule.';
-      throw new JiraError(msg, res.status);
+      const xsrf = /xsrf/i.test(text);
+      if (xsrf) msg = 'Jira rejected the request (XSRF check). The extension could not restore its request rule. Open Settings and click Save.';
+      const err = new JiraError(msg, res.status);
+      err.xsrf = xsrf;
+      throw err;
     }
     return data;
   }

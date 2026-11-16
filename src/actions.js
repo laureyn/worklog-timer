@@ -7,7 +7,9 @@ import { ceilMinute } from './time.js';
 
 export async function client() {
   const [settings, config] = await Promise.all([store.getSettings(), store.getJiraConfig()]);
-  return new Jira(settings, config);
+  const jira = new Jira(settings, config);
+  jira.onXsrf = syncRequestRules;
+  return jira;
 }
 
 /** Start a timer (pausing others unless multiple timers are allowed) and apply the start transition. */
@@ -73,18 +75,40 @@ export async function logWork({ key, timerId, started, ms, comment, estimateMeth
  */
 export async function syncRequestRules() {
   const { baseUrl } = await store.getSettings();
-  const rules = [];
   const base = normalizeBaseUrl(baseUrl);
-  if (base) {
-    rules.push({
-      id: 1, priority: 1,
-      action: { type: 'modifyHeaders', requestHeaders: [{ header: 'origin', operation: 'remove' }] },
-      condition: { requestDomains: [new URL(base).hostname], initiatorDomains: [chrome.runtime.id], resourceTypes: ['xmlhttprequest', 'other'] },
-    });
-  }
+  if (!base) { await chrome.storage.local.remove('ruleError'); return { ok: false, reason: 'no-url' }; }
+  const host = new URL(base).hostname;
+  const rule = {
+    id: 1, priority: 1,
+    action: { type: 'modifyHeaders', requestHeaders: [{ header: 'origin', operation: 'remove' }] },
+    condition: { requestDomains: [host], initiatorDomains: [chrome.runtime.id], resourceTypes: ['xmlhttprequest', 'other'] },
+  };
+  let error = '';
   try {
-    await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [1], addRules: rules });
-  } catch (e) { console.warn('DNR rule failed', e); }
+    await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [1], addRules: [rule] });
+    const active = await chrome.declarativeNetRequest.getSessionRules();
+    if (!active.some((r) => r.id === 1)) error = 'The browser did not keep the Origin rule.';
+  } catch (e) {
+    error = e?.message || String(e);
+    console.warn('DNR rule failed', e);
+  }
+  if (error) await chrome.storage.local.set({ ruleError: error });
+  else await chrome.storage.local.remove('ruleError');
+  return { ok: !error, reason: error || 'ok' };
+}
+
+/** Why Jira might still reject requests: missing site permission, or the Origin rule isn't active. */
+export async function requestDiagnosis() {
+  const { baseUrl } = await store.getSettings();
+  const base = normalizeBaseUrl(baseUrl);
+  if (!base) return 'Enter your Jira URL in Settings.';
+  const origin = new URL(base).origin + '/*';
+  if (!(await chrome.permissions.contains({ origins: [origin] }))) {
+    return `Access to ${new URL(base).host} is not granted. Open Settings and click Save to allow it.`;
+  }
+  const { ruleError } = await chrome.storage.local.get('ruleError');
+  if (ruleError) return `The browser refused the Origin rule: ${ruleError}`;
+  return null;
 }
 
 // ---------- pause when the browser was closed / the computer slept ----------
